@@ -60,7 +60,11 @@ def users(i):
         return realName, memberId, displayName
     return (realName , memberId, channel, displayName)
 
-def hasChannel(i):
+def hasChannel():
+    '''
+    input: user
+    output: boolean, True if user does have a channel and False if it doesn't
+    '''
     if len(user) == 4:
         return True
     return False
