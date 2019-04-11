@@ -16,8 +16,12 @@ def sendMessage(message, realName, channel):
     print(f'Message "{message}" sent to {realName}')
 
 def sendMistakeReport(sheet, channel):
+    '''
+    input: sheet, channel
+    output: sends wb[sheet] to user's channel
+    '''
     # TODO - remove hardcoding of fileContent
-    fileContent = {'file':('/Users/ChristianZagazeta/Desktop/Scripts/Mistake Counter/mistakereport.xlsx', open('/Users/ChristianZagazeta/Desktop/Scripts/Mistake Counter/mistakereport.xlsx', 'rb'), 'xlsx')}
+    fileContent = {'file':('PATH.xlsx', open('PATH.xlsx', 'rb'), 'xlsx')}
     slack.api_call(
     'files.upload',
     channels = channel,
@@ -26,6 +30,10 @@ def sendMistakeReport(sheet, channel):
     )
     
 def isLogger(memberId):
+    '''
+    input: memberId
+    output: True if not workspace admin, False if workspace admin
+    '''
     # admin == workspace admins
     admin = ['USLACKBOT']
     for user in range(len(userList)):
@@ -36,15 +44,20 @@ def isLogger(memberId):
     return False
         
 def users(i):
+    '''
+    input:  i==userList[i]
+            userList contains dict ['members'] that contains a list and dictionaries for each user in workspace
+    output: realName = User's registered name
+            memberId = User's memberId
+            displayName = User's display name
+            channel = User's channel (channel is used to message individual users)
+    '''
     realName, memberId, displayName = userList['members'][i]['profile']['real_name'], userList['members'][i]['id'], userList['members'][i]['profile']['display_name']
     try:
-        channel = slack.api_call('im.open', user = memberId)['channel']['id']
-    except KeyError:
+        channel = slack.api_call('im.open', user = memberId)['channel']['id'] #'im.open' inputs memberId and outputs user's channel under ['channel']['id']                                                                           
+    except KeyError: # skips channel
         channel = None
-        print(f"{realName} does not have a channel listed: skipped")
-        print(f"Real Name: {realName}", f"Member ID: {memberId}")
         return realName, memberId, displayName
-    print(f"Real Name: {realName}", f"Member ID: {memberId}", f'Channel: {channel}')  
     return (realName , memberId, channel, displayName)
 
 def hasChannel(i):
@@ -53,10 +66,38 @@ def hasChannel(i):
     return False
 
 
-# TODO - 
+# TESTING
 userList = slack.api_call('users.list')
 for i in range(len(userList)):
     user = users(i)
     if hasChannel(i):
         realName, memberId, channel, displayName = user[0], user[1], user[2], user[3]
         print(realName)
+        print(channel)
+
+
+
+# -TODO- create mistakereportmockup.xlsx in ZaggyChan
+
+# -TODO- Open workbook, locate 'sheet2'
+
+# -TODO- Begin loop through rows
+
+# -TODO- create new wb, insert name, and mistakes associated with that name
+
+# -TODO- cross reference logger name and userList
+
+# -TODO- if logger isn't in userList, add to list of loggers without slack data
+#        move wb with unlisted loggers report to a new folder
+
+# -TODO- prompt user to send mistake report (optional)
+
+# -TODO- save, create log and send new wb to user with channel
+
+# -TODO- delete sent wb (optional)
+
+# -TODO- continue until rows exhausted
+
+# -TODO- Add unlisted loggers memberId or displaynames
+
+# to be continued...
