@@ -1,107 +1,186 @@
 from slackclient import SlackClient
-import pprint, openpyxl, os
-
-# TODO - set up enviro variable
-slack = SlackClient(open('/Users/ChristianZagazeta/Desktop/token.txt').read())
+import pprint, openpyxl, os, excel2img
 
 def sendMessage(message, realName, channel):
     '''
-    input: text to send, channel
+    input: text to send, name of user, channel
     output: text to be sent to channel user
     '''
     slack.api_call(
     "chat.postMessage",
     channel=channel,
-    text= f"{message}")
-    print(f'Message "{message}" sent to {realName}')
+    text= message)
 
-def sendMistakeReport(sheet, channel):
+def sendMistakeReport(name, channel):
     '''
     input: sheet, channel
     output: sends wb[sheet] to user's channel
     '''
     # TODO - remove hardcoding of fileContent
-    fileContent = {'file':('PATH.xlsx', open('PATH.xlsx', 'rb'), 'xlsx')}
+    #fileContent = {'file': (f'Sent/{name}MistakeReport.xlsx', open(f'Sent/{name}MistakeReport.xlsx', 'rb'), 'xlsx')}
+    #slack.api_call(
+    #'files.upload',
+    #channels = channel,
+    #file = fileContent['file'],
+    #title = f'{name} Mistake Report'
+    #)
+    # send png. Some users may not have the ability to open xlsx files (android, login terminals)
+    fileContent = {'file': (f'Sent/{name}MistakeReport.png', open(f'Sent/{name}MistakeReport.png', 'rb'), 'png')}
     slack.api_call(
     'files.upload',
     channels = channel,
     file = fileContent['file'],
-    title = 'Mistake Report'
+    title = f'{name} Mistake Report'
     )
-    
-def isLogger(memberId):
-    '''
-    input: memberId
-    output: True if not workspace admin, False if workspace admin
-    '''
-    # admin == workspace admins
-    admin = ['USLACKBOT']
-    for user in range(len(userList)):
-        if userList['members'][user]['is_admin'] == True:
-            admin.append(userList['members'][user]['id'])
-    if memberId not in admin:
-        return True
-    return False
         
-def users(i):
-    '''
-    input:  i==userList[i]
-            userList contains dict ['members'] that contains a list and dictionaries for each user in workspace
-    output: realName = User's registered name
-            memberId = User's memberId
-            displayName = User's display name
-            channel = User's channel (channel is used to message individual users)
-    '''
-    realName, memberId, displayName = userList['members'][i]['profile']['real_name'], userList['members'][i]['id'], userList['members'][i]['profile']['display_name']
+
+slack = SlackClient(open('token.txt').read())
+
+# open workbook and assign sheets
+wb = openpyxl.load_workbook("MistakeReport 3.30 to 4.5.xlsx")
+names = wb.sheetnames
+sheet1, sheet2, sheet3 = wb[names[0]], wb[names[1]], wb[names[2]]
+memSheetName, memSheetNum = sheet3['A2'].value, sheet3['B2'].value
+
+# finds the amount of rows in management wb (test sheet is Sheet3)
+amountOfRows = 0
+for i in range(0, 1048576): # calculates how many rows of data in column 1
+    logger = sheet3.cell(row=i + 2, column=1).value # goes through each cell in column 1
+    amountOfRows += 1
+    if logger == None:
+        amountOfRows += 1
+        break
+
+# finds the users channel by using their memberId in management wb (Sheet3)
+channelList = []
+for i in range(0, amountOfRows):
+    channel = None
+    loggerName = sheet3.cell(row=i + 2, column=1).value
+    loggerMemId = sheet3.cell(row=i + 2, column=2).value
     try:
-        channel = slack.api_call('im.open', user = memberId)['channel']['id'] #'im.open' inputs memberId and outputs user's channel under ['channel']['id']                                                                           
+        channel = slack.api_call('im.open', user = loggerMemId)['channel']['id']
+        channelList.append({'Name': loggerName, 'Channel': channel})
     except KeyError: # skips channel
-        channel = None
-        return realName, memberId, displayName
-    return (realName , memberId, channel, displayName)
+        continue
 
-def hasChannel():
-    '''
-    input: user
-    output: boolean, True if user does have a channel and False if it doesn't
-    '''
-    if len(user) == 4:
-        return True
-    return False
+# collects a list of the name on the mistake report, will find out how to perform code block via .max_row method
+numRowsMistakeNames = 0
+for i in range(0, 1048576): # calculates how many rows of data in column 1
+    logger = sheet2.cell(row=i + 3, column=1).value # goes through each cell in column 1
+    if (logger != None):
+        numRowsMistakeNames += 1
+        continue
+    break
 
+# creates a sorted(set()) list of logger names that have mistakes, located in {loggerName}sheet (A**x T***a)
+mistakeNames = sorted((list(set([sheet2.cell(row=i + 3, column=1).value for i in range(numRowsMistakeNames)]))))
 
-# TESTING
-userList = slack.api_call('users.list')
-for i in range(len(userList)):
-    user = users(i)
-    if hasChannel(i):
-        realName, memberId, channel, displayName = user[0], user[1], user[2], user[3]
-        print(realName)
-        print(channel)
+# checks to see if any loggers with a channel have a mistake
+# paper counts how many pieces of paper were saved
+paper = 0
+for user in channelList: 
+    for name in mistakeNames:
+        if name in user['Name']:
+            # please reorder this to reflect the excel doc, lazy
+            mistakes = [sheet2.cell(row=i + 3, column=4).value 
+                        for i in range(numRowsMistakeNames) 
+                        if sheet2.cell(row=i + 3, column=1).value == user['Name']]
 
+            incidentDate = [sheet2.cell(row=i + 3, column=3).value 
+                        for i in range(numRowsMistakeNames) 
+                        if sheet2.cell(row=i + 3, column=1).value == user['Name']]
 
+            enteredDate = [sheet2.cell(row=i + 3, column=2).value 
+                        for i in range(numRowsMistakeNames) 
+                        if sheet2.cell(row=i + 3, column=1).value == user['Name']]   
 
-# -TODO- create mistakereportmockup.xlsx in ZaggyChan
+            suite = [sheet2.cell(row=i + 3, column=5).value 
+                        for i in range(numRowsMistakeNames) 
+                        if sheet2.cell(row=i + 3, column=1).value == user['Name']] 
 
-# -TODO- Open workbook, locate 'sheet2'
+            pkgId = [sheet2.cell(row=i + 3, column=6).value 
+                        for i in range(numRowsMistakeNames) 
+                        if sheet2.cell(row=i + 3, column=1).value == user['Name']]  
 
-# -TODO- Begin loop through rows
+            incidentNotes = [sheet2.cell(row=i + 3, column=8).value 
+                        for i in range(numRowsMistakeNames) 
+                        if sheet2.cell(row=i + 3, column=1).value == user['Name']]    
 
-# -TODO- create new wb, insert name, and mistakes associated with that name
+            #creates new mistake workbook
+            # this work book is going to be sent to the logger
+            wb = openpyxl.Workbook()
+            ws = wb.active
 
-# -TODO- cross reference logger name and userList
+            # sets up header to reflect master mistake report
+            ws['A1'].value = 'Employee'
+            ws['B1'].value = 'Entered Date'
+            ws['C1'].value = 'Incident Date'
+            ws['D1'].value = 'Mistake Type'
+            ws['E1'].value = 'Suite'
+            ws['F1'].value = 'Pkg Id'
+            ws['G1'].value = 'Incident Notes'
 
-# -TODO- if logger isn't in userList, add to list of loggers without slack data
-#        move wb with unlisted loggers report to a new folder
+            # formats header to reflect master mistake report
+            boldFont = openpyxl.styles.Font(bold = True)
+            center = openpyxl.styles.Alignment(horizontal='center', vertical='center', wrap_text=True)
+            for cell in ws["1:1"]:
+                cell.font = boldFont
+                cell.alignment = center
+            ws['A2'].value = name
 
-# -TODO- prompt user to send mistake report (optional)
+            # write information for mistake into spreadsheet
+            for i in range(len(mistakes)):
+                ws.cell(row=i + 2, column=2).value = enteredDate[i]
+                ws.cell(row=i + 2, column=3).value = incidentDate[i]
+                ws.cell(row=i + 2, column=4).value = mistakes[i]
+                ws.cell(row=i + 2, column=5).value = suite[i]
+                ws.cell(row=i + 2, column=6).value = pkgId[i]
+                ws.cell(row=i + 2, column=7).value = incidentNotes[i]
 
-# -TODO- save, create log and send new wb to user with channel
+            # format date
+            for i in range(len(mistakes)):
+                cell = ws.cell(row=i + 2, column=2)
+                cell.value = cell.value.strftime('%m/%d/%y')
+                cell = ws.cell(row=i + 2, column=3)
+                cell.value = cell.value.strftime('%m/%d/%y')
 
-# -TODO- delete sent wb (optional)
+            # wrap text = True
+            for row in ws.iter_rows():
+                for cell in row:
+                    cell.alignment = openpyxl.styles.Alignment(wrap_text=True)
 
-# -TODO- continue until rows exhausted
+            # column width
+            columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+            for col in columns:
+                if col == 'A':
+                    ws.column_dimensions[col].width = 19.29
+                    continue
+                elif col == 'B':
+                    ws.column_dimensions[col].width = 13.57
+                    continue
+                elif col == 'C':
+                    ws.column_dimensions[col].width = 13
+                    continue
+                elif col == 'D':
+                    ws.column_dimensions[col].width = 48
+                    continue
+                elif col == 'E':
+                    ws.column_dimensions[col].width = 9.86
+                    continue
+                elif col == 'F':
+                    ws.column_dimensions[col].width = 12
 
-# -TODO- Add unlisted loggers memberId or displaynames
+                    continue
+                elif col == 'G':
+                    ws.column_dimensions[col].width = 78.43
+                    continue
 
-# to be continued...
+            wb.save(f'Sent/{name}MistakeReport.xlsx')
+
+            # excel is saved as png and is then sent to logger
+            excel2img.export_img(f'Sent/{name}MistakeReport.xlsx', f"Sent/{name}MistakeReport.png", "Sheet", None)
+
+            sendMistakeReport(name, user['Channel'])
+
+            paper += 1
+print(f'You saved {paper} pieces of paper today')
