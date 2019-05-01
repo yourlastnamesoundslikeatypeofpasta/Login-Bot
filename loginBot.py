@@ -1,5 +1,7 @@
 from slackclient import SlackClient
-import pprint, openpyxl, os, excel2img
+import pprint, openpyxl, os, excel2img, sys, time
+
+start = time.time()
 
 def sendMessage(message, realName, channel):
     '''
@@ -14,7 +16,7 @@ def sendMessage(message, realName, channel):
 def sendMistakeReport(name, channel):
     '''
     input: sheet, channel
-    output: sends wb[sheet] to user's channel
+    output: sends mistakeReportWorkbook[sheet] to user's channel
     '''
     # TODO - remove hardcoding of fileContent
     #fileContent = {'file': (f'Sent/{name}MistakeReport.xlsx', open(f'Sent/{name}MistakeReport.xlsx', 'rb'), 'xlsx')}
@@ -32,36 +34,65 @@ def sendMistakeReport(name, channel):
     file = fileContent['file'],
     title = f'{name} Mistake Report'
     )
+    print(f'Mistake report sent to {name}')
         
 
 slack = SlackClient(open('token.txt').read())
 
 # open workbook and assign sheets
-wb = openpyxl.load_workbook("MistakeReport 3.30 to 4.5.xlsx")
-names = wb.sheetnames
-sheet1, sheet2, sheet3 = wb[names[0]], wb[names[1]], wb[names[2]]
-memSheetName, memSheetNum = sheet3['A2'].value, sheet3['B2'].value
+mistakeReportFile = [f for f in os.listdir("Mistake Report XLSX/") if f.endswith('.xlsx')] # lists any xlsx in directory
+managementFile = [f for f in os.listdir('.') if f == 'Management [DO NOT DELETE].xlsx'] # lists any xlsx in cwd 
 
-# finds the amount of rows in management wb (test sheet is Sheet3)
+try:
+    mistakeReportWorkbook = openpyxl.load_workbook('Mistake Report XLSX/' + mistakeReportFile[0])
+    managementWorkbook = openpyxl.load_workbook(managementFile[0])
+except IndexError:
+    print("ERROR: Place mistake report in the folder where this program is located and restart program.")
+    sys.exit()
+
+mistakeReportWorkbookNames = mistakeReportWorkbook.sheetnames
+managementWorkbookNames = managementWorkbook.sheetnames
+sheet1, sheet2 = mistakeReportWorkbook[mistakeReportWorkbookNames[0]], mistakeReportWorkbook[mistakeReportWorkbookNames[1]]
+masterList, specific = managementWorkbook[managementWorkbookNames[0]], managementWorkbook[managementWorkbookNames[1]]
+firstShift, secondShift = managementWorkbook[managementWorkbookNames[2]], managementWorkbook[managementWorkbookNames[3]]
+
+slack = SlackClient(masterList['E2'].value)
+print('Enter |<M>-Send All Mistakes|<S>-Send to Specific Loggers|<1>-Send Mistakes-1st Shift|<2>-Send Mistakes-2nd Shift')
+ans = input('>>>')
+if ans.lower() == 'm':
+    managementList = masterList
+    print('Sending Mistake Reports to all Loggers...')
+elif ans.lower() == 's':
+    managementList = specific
+    print('Sending Mistake Reports to to specific Loggers...')
+elif ans == '1':
+    managementList = firstShift
+    print('Sending Mistake Reports to Loggers on 1st Shift...')
+elif ans == '2':
+    managementList = secondShift
+    print('Sending Mistake Reports to Loggers on 2nd Shift...')
+
+# finds the amount of rows in management mistakeReportWorkbook (test sheet is masterList)
 amountOfRows = 0
 for i in range(0, 1048576): # calculates how many rows of data in column 1
-    logger = sheet3.cell(row=i + 2, column=1).value # goes through each cell in column 1
+    logger = managementList.cell(row=i + 2, column=1).value # goes through each cell in column 1
     amountOfRows += 1
     if logger == None:
         amountOfRows += 1
         break
 
-# finds the users channel by using their memberId in management wb (Sheet3)
+# finds the users channel by using their memberId in management mistakeReportWorkbook (masterList)
 channelList = []
 for i in range(0, amountOfRows):
     channel = None
-    loggerName = sheet3.cell(row=i + 2, column=1).value
-    loggerMemId = sheet3.cell(row=i + 2, column=2).value
+    loggerName = managementList.cell(row=i + 2, column=1).value
+    loggerMemId = managementList.cell(row=i + 2, column=2).value
     try:
         channel = slack.api_call('im.open', user = loggerMemId)['channel']['id']
         channelList.append({'Name': loggerName, 'Channel': channel})
     except KeyError: # skips channel
         continue
+print('Slack Token: Granted')
 
 # collects a list of the name on the mistake report, will find out how to perform code block via .max_row method
 numRowsMistakeNames = 0
@@ -78,6 +109,7 @@ mistakeNames = sorted((list(set([sheet2.cell(row=i + 3, column=1).value for i in
 # checks to see if any loggers with a channel have a mistake
 # paper counts how many pieces of paper were saved
 paper = 0
+print('Sending Mistake Reports to Loggers...')
 for user in channelList: 
     for name in mistakeNames:
         if name in user['Name']:
@@ -108,8 +140,8 @@ for user in channelList:
 
             #creates new mistake workbook
             # this work book is going to be sent to the logger
-            wb = openpyxl.Workbook()
-            ws = wb.active
+            mistakeReportWorkbook = openpyxl.Workbook()
+            ws = mistakeReportWorkbook.active
 
             # sets up header to reflect master mistake report
             ws['A1'].value = 'Employee'
@@ -169,13 +201,12 @@ for user in channelList:
                     continue
                 elif col == 'F':
                     ws.column_dimensions[col].width = 12
-
-                    continue
+                    continue 
                 elif col == 'G':
                     ws.column_dimensions[col].width = 78.43
                     continue
 
-            wb.save(f'Sent/{name}MistakeReport.xlsx')
+            mistakeReportWorkbook.save(f'Sent/{name}MistakeReport.xlsx')
 
             # excel is saved as png and is then sent to logger
             excel2img.export_img(f'Sent/{name}MistakeReport.xlsx', f"Sent/{name}MistakeReport.png", "Sheet", None)
@@ -183,4 +214,6 @@ for user in channelList:
             sendMistakeReport(name, user['Channel'])
 
             paper += 1
+end = time.time()
+print(round((end-start)/60, 2), 'minutes')
 print(f'You saved {paper} pieces of paper today')
